@@ -55,17 +55,7 @@ const emptyDetectedFields: DetectedFields = {
   haloDetected: "",
   analysisStatus: "",
 };
-const resultData = useMemo(
-  () => ({
-    playerName: detectedFields.playerName,
-    jerseyNumber: detectedFields.jerseyNumber,
-    phase: analysisResult?.phase || detectedFields.detectedPhase,
-    summary: analysisResult?.summary || "",
-    keyPoint: analysisResult?.primary_decision || "",
-    openOption: analysisResult?.best_alternative || "",
-  }),
-  [detectedFields, analysisResult]
-);
+
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 const backendEnabled = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
@@ -82,6 +72,7 @@ function getSupabase() {
 async function loadSavedSubmissionsFromBackend(): Promise<StoredSubmission[]> {
   const supabase = getSupabase();
   if (!supabase) return [];
+
   const { data, error } = await supabase
     .from("submissions")
     .select("*")
@@ -90,30 +81,30 @@ async function loadSavedSubmissionsFromBackend(): Promise<StoredSubmission[]> {
 
   if (error) throw error;
 
-    return (data || []).map((row: any) => ({
+  return (data || []).map((row: any) => ({
     id: row.id,
     createdAt: row.created_at,
-    clipTitle: row.clip_title || '',
-    notes: row.notes || '',
-    videoName: row.video_name || row.file_name || '',
-    fileName: row.file_name || row.video_name || '',
-    detectedPlayer: row.detected_player || '',
-    jerseyNumber: row.jersey_number || '',
-    teamName: row.team_name || '',
-    viewType: row.view_type || '',
-    haloDetected: row.halo_detected || '',
-    phase: row.phase || '',
-    sourceType: row.source_type || '',
-    clipLength: row.clip_length || '',
-    reportJson: row.report_json ? JSON.stringify(row.report_json, null, 2) : '',
-    annotatedStillPath: row.annotated_still_path || '',
-    pdfPath: row.pdf_path || '',
+    clipTitle: row.clip_title || "",
+    notes: row.notes || "",
+    videoName: row.video_name || row.file_name || "",
+    fileName: row.file_name || row.video_name || "",
+    detectedPlayer: row.detected_player || "",
+    jerseyNumber: row.jersey_number || "",
+    teamName: row.team_name || "",
+    viewType: row.view_type || "",
+    haloDetected: row.halo_detected || "",
+    phase: row.phase || "",
+    sourceType: row.source_type || "",
+    clipLength: row.clip_length || "",
+    reportJson: row.report_json ? JSON.stringify(row.report_json, null, 2) : "",
+    annotatedStillPath: row.annotated_still_path || "",
+    pdfPath: row.pdf_path || "",
   }));
 }
 
 async function saveSubmissionToBackend(submission: StoredSubmission) {
   const supabase = getSupabase();
-  if (!supabase) throw new Error('Backend not configured');
+  if (!supabase) throw new Error("Backend not configured");
 
   const payload = {
     id: submission.id,
@@ -135,7 +126,7 @@ async function saveSubmissionToBackend(submission: StoredSubmission) {
     pdf_path: submission.pdfPath || null,
   };
 
-  const { error } = await supabase.from('submissions').upsert(payload);
+  const { error } = await supabase.from("submissions").upsert(payload);
   if (error) throw error;
   return submission;
 }
@@ -200,8 +191,8 @@ export default function App() {
   const [saveError, setSaveError] = useState("");
   const [reportJsonOpen, setReportJsonOpen] = useState(false);
   const [copyMessage, setCopyMessage] = useState("");
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [analysisResult, setAnalysisResult] = useState<any | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const clipDerivedFields = {
     clipLength: selectedFile || reopenedSubmission ? "00:18" : "",
@@ -227,6 +218,7 @@ export default function App() {
         setSavedSubmissions(saved);
         return;
       }
+
       const saved = JSON.parse(localStorage.getItem("cvfc-submissions") || "[]") as StoredSubmission[];
       setSavedSubmissions(saved);
     } catch {
@@ -241,75 +233,81 @@ export default function App() {
   const handleFileSelect = (file: File | null) => {
     if (!file) return;
     if (videoUrl && videoUrl.startsWith("blob:")) URL.revokeObjectURL(videoUrl);
+
     setSaveError("");
     setReopenedSubmission(null);
     setDetectedFields(emptyDetectedFields);
+    setAnalysisResult(null);
     setSelectedFile(file);
     setVideoName(file.name);
     setVideoUrl(URL.createObjectURL(file));
   };
 
- const resultData = useMemo(
-  () =>
-    analysisResult || {
-      summary: "",
-      keyPoint: "",
-      openOption: "",
-    },
-  [analysisResult]
-);
+  const resultData = useMemo(
+    () => ({
+      summary: analysisResult?.summary || "",
+      keyPoint: analysisResult?.primary_decision || "",
+      openOption: analysisResult?.best_alternative || "",
+      phase: analysisResult?.phase || detectedFields.detectedPhase,
+    }),
+    [analysisResult, detectedFields.detectedPhase]
+  );
 
   useEffect(() => {
     if (!submitted) return;
+
     setIsProcessing(true);
     setShowResult(false);
+
     const timer = window.setTimeout(() => {
       setIsProcessing(false);
       setShowResult(true);
     }, 1800);
+
     return () => window.clearTimeout(timer);
   }, [submitted]);
 
   const extractFramesFromVideo = async (file: File): Promise<string[]> => {
-  const url = URL.createObjectURL(file);
-  const video = document.createElement("video");
-  video.src = url;
-  video.muted = true;
-  video.playsInline = true;
+    const url = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    video.src = url;
+    video.muted = true;
+    video.playsInline = true;
 
-  await new Promise<void>((resolve, reject) => {
-    video.onloadedmetadata = () => resolve();
-    video.onerror = () => reject(new Error("Failed to load video"));
-  });
-
-  const duration = video.duration || 1;
-  const sampleCount = Math.min(8, Math.max(4, Math.floor(duration)));
-  const times = Array.from({ length: sampleCount }, (_, i) =>
-    (duration * i) / Math.max(sampleCount - 1, 1)
-  );
-
-  const frames: string[] = [];
-  const canvas = document.createElement("canvas");
-  canvas.width = 960;
-  canvas.height = 540;
-  const ctx = canvas.getContext("2d");
-
-  for (const time of times) {
     await new Promise<void>((resolve, reject) => {
-      video.currentTime = Math.min(time, Math.max(0, duration - 0.05));
-      video.onseeked = () => resolve();
-      video.onerror = () => reject(new Error("Seek failed"));
+      video.onloadedmetadata = () => resolve();
+      video.onerror = () => reject(new Error("Failed to load video"));
     });
 
-    if (ctx) {
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      frames.push(canvas.toDataURL("image/jpeg", 0.8));
-    }
-  }
+    const duration = video.duration || 1;
+    const sampleCount = Math.min(8, Math.max(4, Math.floor(duration)));
+    const times = Array.from({ length: sampleCount }, (_, i) =>
+      (duration * i) / Math.max(sampleCount - 1, 1)
+    );
 
-  URL.revokeObjectURL(url);
-  return frames;
-};
+    const frames: string[] = [];
+    const canvas = document.createElement("canvas");
+    canvas.width = 960;
+    canvas.height = 540;
+    const ctx = canvas.getContext("2d");
+
+    for (const time of times) {
+      await new Promise<void>((resolve, reject) => {
+        video.currentTime = Math.min(time, Math.max(0, duration - 0.05));
+        video.onseeked = () => resolve();
+        video.onerror = () => reject(new Error("Seek failed"));
+      });
+
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        frames.push(canvas.toDataURL("image/jpeg", 0.8));
+      }
+    }
+
+    URL.revokeObjectURL(url);
+    return frames;
+  };
+
   const handleGenerate = async () => {
     const id = makeSubmissionId();
     setSubmissionId(id);
@@ -324,7 +322,8 @@ export default function App() {
       analysisStatus: "Report ready",
     };
     setDetectedFields(nextDetected);
-        let analysis;
+
+    let analysis: any;
     try {
       const frames = selectedFile ? await extractFramesFromVideo(selectedFile) : [];
       const apiRes = await fetch("/api/analyze", {
@@ -344,14 +343,20 @@ export default function App() {
       }
 
       analysis = await apiRes.json();
+      setAnalysisResult(analysis);
+
+      setDetectedFields((prev) => ({
+        ...prev,
+        detectedPhase: analysis.phase || prev.detectedPhase,
+      }));
     } catch (error: any) {
       setSaveError(error?.message || "Analysis failed");
       return;
     }
-  
-  const reportForSave = analysis;
-    
- const submission: StoredSubmission = {
+
+    const reportForSave = analysis;
+
+    const submission: StoredSubmission = {
       id,
       createdAt: new Date().toISOString(),
       clipTitle,
@@ -363,12 +368,12 @@ export default function App() {
       teamName: nextDetected.teamName,
       viewType: clipDerivedFields.viewType,
       haloDetected: nextDetected.haloDetected,
-      phase: nextDetected.detectedPhase,
+      phase: analysis?.phase || nextDetected.detectedPhase,
       sourceType: clipDerivedFields.sourceType,
       clipLength: clipDerivedFields.clipLength,
       reportJson: JSON.stringify(reportForSave, null, 2),
-      annotatedStillPath: '',
-      pdfPath: '',
+      annotatedStillPath: "",
+      pdfPath: "",
     };
 
     try {
@@ -391,6 +396,7 @@ export default function App() {
 
   const openSavedSubmission = async (item: StoredSubmission) => {
     if (videoUrl && videoUrl.startsWith("blob:")) URL.revokeObjectURL(videoUrl);
+
     setSelectedFile(null);
     setVideoUrl(null);
     setVideoName(item.videoName || item.fileName || "Saved clip");
@@ -398,6 +404,7 @@ export default function App() {
     setNotes(item.notes || "");
     setSubmissionId(item.id);
     setReopenedSubmission(item);
+
     setDetectedFields({
       playerName: item.detectedPlayer || "",
       jerseyNumber: item.jerseyNumber || "",
@@ -407,6 +414,11 @@ export default function App() {
       analysisStatus: item.detectedPlayer ? "Report ready" : "",
     });
 
+    try {
+      setAnalysisResult(item.reportJson ? JSON.parse(item.reportJson) : null);
+    } catch {
+      setAnalysisResult(null);
+    }
 
     setSubmitted(true);
     setIsProcessing(false);
@@ -417,7 +429,7 @@ export default function App() {
     () => ({
       submissionId,
       player: `${detectedFields.playerName} #${detectedFields.jerseyNumber}`,
-      phase: detectedFields.detectedPhase,
+      phase: resultData.phase,
       summary: resultData.summary,
       mainPoint: resultData.keyPoint,
       nextOpenOption: resultData.openOption,
@@ -462,6 +474,7 @@ export default function App() {
 
   const resetToUpload = () => {
     if (videoUrl && videoUrl.startsWith("blob:")) URL.revokeObjectURL(videoUrl);
+
     setSubmitted(false);
     setShowResult(false);
     setIsProcessing(false);
@@ -473,6 +486,7 @@ export default function App() {
     setNotes("");
     setReopenedSubmission(null);
     setDetectedFields(emptyDetectedFields);
+    setAnalysisResult(null);
     setSaveError("");
     loadSavedSubmissions();
   };
@@ -707,7 +721,7 @@ export default function App() {
                   <CardTitle>{isProcessing ? "Generating report" : "Submission progress"}</CardTitle>
                   <CardDescription>
                     {isProcessing
-                      ? "Saving the submission, creating a mock analysis response, and preparing the results view."
+                      ? "Analyzing the clip and preparing the results view."
                       : "The uploader stays simple, but the system still shows what it detected."}
                   </CardDescription>
                 </CardHeader>
@@ -715,7 +729,7 @@ export default function App() {
                   {isProcessing ? (
                     <div className="row gap-12 muted">
                       <Loader2 size={18} className="spin" />
-                      Working on a mock report...
+                      Working on analysis...
                     </div>
                   ) : (
                     <>
@@ -810,10 +824,10 @@ export default function App() {
                   <div>
                     <CardTitle>Generated result</CardTitle>
                     <CardDescription>
-  {backendEnabled
-    ? 'The submission metadata and report output are now stored in Supabase.'
-    : 'The submission is stored locally and the analysis response is still mocked.'}
-</CardDescription>
+                      {backendEnabled
+                        ? "The submission metadata and report output are now stored in Supabase."
+                        : "The submission is stored locally and the analysis response is still mocked."}
+                    </CardDescription>
                   </div>
                   <div className="row wrap gap-12">
                     <Button variant="outline" onClick={handleGenerate}>
@@ -851,7 +865,7 @@ export default function App() {
                   </div>
                   <div className="metric-card">
                     <div className="metric-label">Phase</div>
-                    <div className="metric-value">{detectedFields.detectedPhase}</div>
+                    <div className="metric-value">{resultData.phase}</div>
                   </div>
                   <div className="metric-card">
                     <div className="metric-label">Next open option</div>
