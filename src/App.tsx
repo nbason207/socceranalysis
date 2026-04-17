@@ -191,6 +191,7 @@ export default function App() {
   const [reportJsonOpen, setReportJsonOpen] = useState(false);
   const [copyMessage, setCopyMessage] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<any | null>(null);
 
   const clipDerivedFields = {
     clipLength: selectedFile || reopenedSubmission ? "00:18" : "",
@@ -238,16 +239,15 @@ export default function App() {
     setVideoUrl(URL.createObjectURL(file));
   };
 
-  const resultData = useMemo(
-    () => ({
-      summary:
-        "The system identified the highlighted player as the wide outlet and flagged a useful attacking build-up moment with an outside lane available.",
-      keyPoint:
-        "If the first defender commits, the wide lane is the first threat. If the second defender slides, the inside option becomes the next picture.",
-      openOption: "Central pocket opens if help shifts wide.",
-    }),
-    []
-  );
+ const resultData = useMemo(
+  () =>
+    analysisResult || {
+      summary: "",
+      keyPoint: "",
+      openOption: "",
+    },
+  [analysisResult]
+);
 
   useEffect(() => {
     if (!submitted) return;
@@ -260,7 +260,46 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [submitted]);
 
-  
+  const extractFramesFromVideo = async (file: File): Promise<string[]> => {
+  const url = URL.createObjectURL(file);
+  const video = document.createElement("video");
+  video.src = url;
+  video.muted = true;
+  video.playsInline = true;
+
+  await new Promise<void>((resolve, reject) => {
+    video.onloadedmetadata = () => resolve();
+    video.onerror = () => reject(new Error("Failed to load video"));
+  });
+
+  const duration = video.duration || 1;
+  const sampleCount = Math.min(8, Math.max(4, Math.floor(duration)));
+  const times = Array.from({ length: sampleCount }, (_, i) =>
+    (duration * i) / Math.max(sampleCount - 1, 1)
+  );
+
+  const frames: string[] = [];
+  const canvas = document.createElement("canvas");
+  canvas.width = 960;
+  canvas.height = 540;
+  const ctx = canvas.getContext("2d");
+
+  for (const time of times) {
+    await new Promise<void>((resolve, reject) => {
+      video.currentTime = Math.min(time, Math.max(0, duration - 0.05));
+      video.onseeked = () => resolve();
+      video.onerror = () => reject(new Error("Seek failed"));
+    });
+
+    if (ctx) {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      frames.push(canvas.toDataURL("image/jpeg", 0.8));
+    }
+  }
+
+  URL.revokeObjectURL(url);
+  return frames;
+};
   const handleGenerate = async () => {
     const id = makeSubmissionId();
     setSubmissionId(id);
@@ -275,17 +314,33 @@ export default function App() {
       analysisStatus: "Report ready",
     };
     setDetectedFields(nextDetected);
-    const reportForSave = {
-      submissionId: id,
-      player: `${nextDetected.playerName} #${nextDetected.jerseyNumber}`,
-      phase: nextDetected.detectedPhase,
-      summary: resultData.summary,
-      mainPoint: resultData.keyPoint,
-      nextOpenOption: resultData.openOption,
-      clipTitle,
-      notes,
-      videoName,
-    };
+        let analysis;
+    try {
+      const frames = selectedFile ? await extractFramesFromVideo(selectedFile) : [];
+      const apiRes = await fetch("/api/analyze", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          clipTitle,
+          notes,
+          frames
+        })
+      });
+
+      if (!apiRes.ok) {
+        throw new Error("Analysis request failed");
+      }
+
+      analysis = await apiRes.json();
+    } catch (error: any) {
+      setSaveError(error?.message || "Analysis failed");
+      return;
+    }
+  
+  const reportForSave = analysis;
+    
  const submission: StoredSubmission = {
       id,
       createdAt: new Date().toISOString(),
