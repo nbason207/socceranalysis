@@ -33,7 +33,9 @@ type StoredSubmission = {
   phase: string;
   sourceType: string;
   clipLength: string;
-  videoPath?: string;
+  reportJson?: string;
+  annotatedStillPath?: string;
+  pdfPath?: string;
 };
 
 type DetectedFields = {
