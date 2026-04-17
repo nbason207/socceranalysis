@@ -55,7 +55,17 @@ const emptyDetectedFields: DetectedFields = {
   haloDetected: "",
   analysisStatus: "",
 };
-
+const resultData = useMemo(
+  () => ({
+    playerName: detectedFields.playerName,
+    jerseyNumber: detectedFields.jerseyNumber,
+    phase: analysisResult?.phase || detectedFields.detectedPhase,
+    summary: analysisResult?.summary || "",
+    keyPoint: analysisResult?.primary_decision || "",
+    openOption: analysisResult?.best_alternative || "",
+  }),
+  [detectedFields, analysisResult]
+);
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "";
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 const backendEnabled = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
