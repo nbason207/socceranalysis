@@ -80,38 +80,30 @@ async function loadSavedSubmissionsFromBackend(): Promise<StoredSubmission[]> {
 
   if (error) throw error;
 
-  return (data || []).map((row: any) => ({
+    return (data || []).map((row: any) => ({
     id: row.id,
     createdAt: row.created_at,
-    clipTitle: row.clip_title || "",
-    notes: row.notes || "",
-    videoName: row.video_name || row.file_name || "",
-    fileName: row.file_name || row.video_name || "",
-    detectedPlayer: row.detected_player || "",
-    jerseyNumber: row.jersey_number || "",
-    teamName: row.team_name || "",
-    viewType: row.view_type || "",
-    haloDetected: row.halo_detected || "",
-    phase: row.phase || "",
-    sourceType: row.source_type || "",
-    clipLength: row.clip_length || "",
-    videoPath: row.video_path || "",
+    clipTitle: row.clip_title || '',
+    notes: row.notes || '',
+    videoName: row.video_name || row.file_name || '',
+    fileName: row.file_name || row.video_name || '',
+    detectedPlayer: row.detected_player || '',
+    jerseyNumber: row.jersey_number || '',
+    teamName: row.team_name || '',
+    viewType: row.view_type || '',
+    haloDetected: row.halo_detected || '',
+    phase: row.phase || '',
+    sourceType: row.source_type || '',
+    clipLength: row.clip_length || '',
+    reportJson: row.report_json ? JSON.stringify(row.report_json, null, 2) : '',
+    annotatedStillPath: row.annotated_still_path || '',
+    pdfPath: row.pdf_path || '',
   }));
 }
 
-async function saveSubmissionToBackend(submission: StoredSubmission, file: File | null) {
+async function saveSubmissionToBackend(submission: StoredSubmission) {
   const supabase = getSupabase();
-  if (!supabase) throw new Error("Backend not configured");
-
-  let videoPath = submission.videoPath || "";
-  if (file) {
-    const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    videoPath = `clips/${submission.id}/${sanitizedName}`;
-    const { error: uploadError } = await supabase.storage
-      .from("clips")
-      .upload(videoPath, file, { upsert: true, contentType: file.type || "video/mp4" });
-    if (uploadError) throw uploadError;
-  }
+  if (!supabase) throw new Error('Backend not configured');
 
   const payload = {
     id: submission.id,
@@ -128,21 +120,14 @@ async function saveSubmissionToBackend(submission: StoredSubmission, file: File 
     phase: submission.phase,
     source_type: submission.sourceType,
     clip_length: submission.clipLength,
-    video_path: videoPath,
+    report_json: submission.reportJson ? JSON.parse(submission.reportJson) : null,
+    annotated_still_path: submission.annotatedStillPath || null,
+    pdf_path: submission.pdfPath || null,
   };
 
-  const { error } = await supabase.from("submissions").upsert(payload);
+  const { error } = await supabase.from('submissions').upsert(payload);
   if (error) throw error;
-
-  return { ...submission, videoPath };
-}
-
-async function makeVideoUrlFromPath(path: string) {
-  const supabase = getSupabase();
-  if (!supabase || !path) return null;
-  const { data, error } = await supabase.storage.from("clips").createSignedUrl(path, 60 * 60);
-  if (error) throw error;
-  return data?.signedUrl || null;
+  return submission;
 }
 
 function Card(props: React.HTMLAttributes<HTMLDivElement>) {
@@ -275,6 +260,7 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [submitted]);
 
+  
   const handleGenerate = async () => {
     const id = makeSubmissionId();
     setSubmissionId(id);
@@ -289,8 +275,18 @@ export default function App() {
       analysisStatus: "Report ready",
     };
     setDetectedFields(nextDetected);
-
-    const submission: StoredSubmission = {
+    const reportForSave = {
+      submissionId: id,
+      player: `${nextDetected.playerName} #${nextDetected.jerseyNumber}`,
+      phase: nextDetected.detectedPhase,
+      summary: resultData.summary,
+      mainPoint: resultData.keyPoint,
+      nextOpenOption: resultData.openOption,
+      clipTitle,
+      notes,
+      videoName,
+    };
+ const submission: StoredSubmission = {
       id,
       createdAt: new Date().toISOString(),
       clipTitle,
@@ -305,12 +301,14 @@ export default function App() {
       phase: nextDetected.detectedPhase,
       sourceType: clipDerivedFields.sourceType,
       clipLength: clipDerivedFields.clipLength,
-      videoPath: reopenedSubmission?.videoPath || "",
+      reportJson: JSON.stringify(reportForSave, null, 2),
+      annotatedStillPath: '',
+      pdfPath: '',
     };
 
     try {
       if (backendEnabled) {
-        await saveSubmissionToBackend(submission, selectedFile);
+        await saveSubmissionToBackend(submission);
         await loadSavedSubmissions();
       } else {
         const existing = JSON.parse(localStorage.getItem("cvfc-submissions") || "[]") as StoredSubmission[];
@@ -344,14 +342,6 @@ export default function App() {
       analysisStatus: item.detectedPlayer ? "Report ready" : "",
     });
 
-    if (backendEnabled && item.videoPath) {
-      try {
-        const signedUrl = await makeVideoUrlFromPath(item.videoPath);
-        setVideoUrl(signedUrl);
-      } catch {
-        setVideoUrl(null);
-      }
-    }
 
     setSubmitted(true);
     setIsProcessing(false);
@@ -755,10 +745,10 @@ export default function App() {
                   <div>
                     <CardTitle>Generated result</CardTitle>
                     <CardDescription>
-                      {backendEnabled
-                        ? "The submission is now stored in Supabase and the selected file is uploaded to storage."
-                        : "The submission is stored locally and the analysis response is still mocked."}
-                    </CardDescription>
+  {backendEnabled
+    ? 'The submission metadata and report output are now stored in Supabase.'
+    : 'The submission is stored locally and the analysis response is still mocked.'}
+</CardDescription>
                   </div>
                   <div className="row wrap gap-12">
                     <Button variant="outline" onClick={handleGenerate}>
