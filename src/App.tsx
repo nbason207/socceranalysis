@@ -338,8 +338,8 @@ export default function App() {
         })
       });
 
-           if (!apiRes.ok) {
-        let message = "Analysis request failed";
+                 if (!apiRes.ok) {
+        let message = `Analysis request failed (${apiRes.status})`;
         try {
           const err = await apiRes.json();
           message = err?.error || message;
